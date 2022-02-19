@@ -1,0 +1,14 @@
+{
+  "name": "filmweb-todoist",
+  "version": "1.0.0",
+  "private": "true",
+  "description": "",
+  "author": "Gander",
+  "license": "ISC",
+  "dependencies": {
+
+  },
+  "devDependencies": {
+
+  }
+}
