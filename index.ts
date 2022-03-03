@@ -1,6 +1,7 @@
 import {TodoistApi} from '@doist/todoist-api-typescript';
 import scrapeIt, {ScrapeResult} from 'scrape-it';
 import 'dotenv/config';
+import tv from './tv';
 
 const api = new TodoistApi(process.env.TODOIST_TOKEN as string);
 const regex = new RegExp(`\\((?<url>https://www.filmweb.pl/[^)]+)\\)$`, 'm');
@@ -96,8 +97,10 @@ async function main() {
     for (let todoTask of todoTasks) {
         const lbls = await getEntryLabels(todoTask.url);
         const ids = await labels.getLabelIds(lbls);
-        await api.updateTask(todoTask.id, {labelIds: ids});
-        console.log(todoTask.id, todoTask.url, lbls);
+        const tvs = await tv(todoTask.url);
+        tvs.unshift(...lbls);
+        await api.updateTask(todoTask.id, {labelIds: ids, description: tvs.join("; \n")});
+        console.log(todoTask.id, todoTask.url, lbls, tvs.join("; "));
     }
 }
 
