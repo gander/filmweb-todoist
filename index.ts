@@ -113,7 +113,7 @@ async function main() {
 
     console.log('Removed duplicates:', (await Promise.all(promises)).length);
 
-    const log = [];
+    const log: Array<[number, string, string]> = [];
 
     bar.start(todoTasks.length, 0);
     for (let todoTask of todoTasks) {
@@ -129,7 +129,7 @@ async function main() {
     }
     bar.stop();
 
-    console.table(log);
+    console.table(log.sort(({1: urlA}, {1: urlB}) => urlA.localeCompare(urlB)));
 }
 
 main().catch(e => console.error(e.message));
