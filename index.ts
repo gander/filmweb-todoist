@@ -1,5 +1,6 @@
 import {TodoistApi} from '@doist/todoist-api-typescript';
 import scrapeIt, {ScrapeResult} from 'scrape-it';
+import cliProgress from 'cli-progress'
 import 'dotenv/config';
 import tv from './tv';
 
@@ -70,6 +71,8 @@ interface Task {
 const urls = new Set();
 const promises: Promise<boolean>[] = [];
 
+const bar = new cliProgress.SingleBar({}, cliProgress.Presets.rect);
+
 const getTasks = async (): Promise<Task[]> =>
     (await api.getTasks({projectId}))
         .map(task => ({
@@ -112,6 +115,7 @@ async function main() {
 
     const log = [];
 
+    bar.start(todoTasks.length, 0);
     for (let todoTask of todoTasks) {
         const lbls = await getEntryLabels(todoTask.url);
         const ids = await labels.getLabelIds(lbls);
@@ -121,7 +125,9 @@ async function main() {
         if (lbls.length) {
             log.push([todoTask.id, todoTask.url, lbls.join("; ")]);
         }
+        bar.increment();
     }
+    bar.stop();
 
     console.table(log);
 }
