@@ -67,6 +67,9 @@ interface Task {
     url: string,
 }
 
+const urls = new Set();
+const promises: Promise<boolean>[] = [];
+
 const getTasks = async (): Promise<Task[]> =>
     (await api.getTasks({projectId}))
         .map(task => ({
@@ -74,7 +77,18 @@ const getTasks = async (): Promise<Task[]> =>
             labels: task.labelIds,
             url: regex.exec(task.content)?.groups?.url,
         }))
-        .filter((taskUrl: Task | { url: undefined }): taskUrl is Task => !!taskUrl.url);
+        .filter((taskUrl: Task | { url: undefined }): taskUrl is Task => !!taskUrl.url)
+        .filter((task: Task) => {
+            const exists = urls.has(task.url);
+
+            if (exists) {
+                promises.push(api.closeTask(task.id));
+            } else {
+                urls.add(task.url);
+            }
+
+            return !exists;
+        });
 
 
 const getEntryLabels = async (url: string): Promise<string[]> => {
@@ -94,14 +108,22 @@ async function main() {
 
     const todoTasks = await getTasks();
 
+    console.log('Removed duplicates:', (await Promise.all(promises)).length);
+
+    const log = [];
+
     for (let todoTask of todoTasks) {
         const lbls = await getEntryLabels(todoTask.url);
         const ids = await labels.getLabelIds(lbls);
         const tvs = await tv(todoTask.url);
         tvs.unshift(...lbls);
         await api.updateTask(todoTask.id, {labelIds: ids, description: tvs.join("; \n")});
-        console.log(todoTask.id, todoTask.url, lbls, tvs.join("; "));
+        if (lbls.length) {
+            log.push([todoTask.id, todoTask.url, lbls.join("; ")]);
+        }
     }
+
+    console.table(log);
 }
 
 main().catch(e => console.error(e.message));
