@@ -119,9 +119,10 @@ async function main() {
     for (let todoTask of todoTasks) {
         const lbls = await getEntryLabels(todoTask.url);
         const ids = await labels.getLabelIds(lbls);
-        const tvs = await tv(todoTask.url);
-        tvs.unshift(...lbls);
-        await api.updateTask(todoTask.id, {labelIds: ids, description: tvs.join("; \n")});
+        // const tvs = await tv(todoTask.url);
+        // tvs.unshift(...lbls);
+        // await api.updateTask(todoTask.id, {labelIds: ids, description: tvs.join("; \n")});
+        await api.updateTask(todoTask.id, {labelIds: ids, description: ''});
         if (lbls.length) {
             log.push([todoTask.id, todoTask.url, lbls.join("; ")]);
         }
