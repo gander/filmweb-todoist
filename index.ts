@@ -1,8 +1,7 @@
 import {TodoistApi} from '@doist/todoist-api-typescript';
 import scrapeIt, {ScrapeResult} from 'scrape-it';
-import cliProgress from 'cli-progress'
+import cliProgress from 'cli-progress';
 import 'dotenv/config';
-import tv from './tv';
 
 const api = new TodoistApi(process.env.TODOIST_TOKEN as string);
 const regex = new RegExp(`\\((?<url>https://www.filmweb.pl/[^)]+)\\)$`, 'm');
@@ -46,7 +45,7 @@ class LabelsService {
             return this.map.get(lbl) as number;
         }
 
-        const {id} = await this.api.addLabel({name: lbl})
+        const {id} = await this.api.addLabel({name: lbl});
 
         return id;
     }
@@ -114,23 +113,30 @@ async function main() {
     console.log('Removed duplicates:', (await Promise.all(promises)).length);
 
     const log: Array<[number, string, string]> = [];
+    const errors: Array<string> = [];
 
     bar.start(todoTasks.length, 0);
     for (let todoTask of todoTasks) {
-        const lbls = await getEntryLabels(todoTask.url);
-        const ids = await labels.getLabelIds(lbls);
-        // const tvs = await tv(todoTask.url);
-        // tvs.unshift(...lbls);
-        // await api.updateTask(todoTask.id, {labelIds: ids, description: tvs.join("; \n")});
-        await api.updateTask(todoTask.id, {labelIds: ids, description: ''});
-        if (lbls.length) {
-            log.push([todoTask.id, todoTask.url, lbls.join("; ")]);
+        try {
+            const lbls = await getEntryLabels(todoTask.url);
+            const ids = await labels.getLabelIds(lbls);
+            // const tvs = await tv(todoTask.url);
+            // tvs.unshift(...lbls);
+            // await api.updateTask(todoTask.id, {labelIds: ids, description: tvs.join("; \n")});
+            await api.updateTask(todoTask.id, {labelIds: ids, description: ''});
+            if (lbls.length) {
+                log.push([todoTask.id, todoTask.url, lbls.join('; ')]);
+            }
+        } catch (e) {
+            errors.push(`${e}`);
+        } finally {
+            bar.increment();
         }
-        bar.increment();
     }
     bar.stop();
 
     console.table(log.sort(({1: urlA}, {1: urlB}) => urlA.localeCompare(urlB)));
+    console.table(errors);
 }
 
 main().catch(e => console.error(e.message));
