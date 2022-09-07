@@ -2,6 +2,7 @@ import {TodoistApi} from '@doist/todoist-api-typescript';
 import scrapeIt, {ScrapeResult} from 'scrape-it';
 import cliProgress from 'cli-progress';
 import 'dotenv/config';
+import {parallel, tryit} from 'radash';
 
 const api = new TodoistApi(process.env.TODOIST_TOKEN as string);
 const regex = new RegExp(`\\((?<url>https://www.filmweb.pl/[^)]+)\\)$`, 'm');
@@ -67,6 +68,9 @@ interface Task {
     url: string,
 }
 
+type Logs = Array<[number, string, string]>;
+type Errors = Array<[number, string]>;
+
 const urls = new Set();
 const promises: Promise<boolean>[] = [];
 
@@ -104,6 +108,16 @@ const getEntryLabels = async (url: string): Promise<string[]> => {
         .map(value => `VOD.${value}`);
 };
 
+const processTask = tryit(async function (todoTask: Task, labels: LabelsService, log: Logs) {
+    const entryLabels = await getEntryLabels(todoTask.url);
+    const labelIds = await labels.getLabelIds(entryLabels);
+    await api.updateTask(todoTask.id, {labelIds, description: ''});
+    if (entryLabels.length) {
+        log.push([todoTask.id, todoTask.url, entryLabels.join('; ')]);
+    }
+});
+
+
 async function main() {
     const labels = new LabelsService(api);
     await labels.load();
@@ -112,27 +126,16 @@ async function main() {
 
     console.log('Removed duplicates:', (await Promise.all(promises)).length);
 
-    const log: Array<[number, string, string]> = [];
-    const errors: Array<string> = [];
+    const log: Logs = [];
+    const errors: Errors = [];
 
     bar.start(todoTasks.length, 0);
-    for (let todoTask of todoTasks) {
-        try {
-            const lbls = await getEntryLabels(todoTask.url);
-            const ids = await labels.getLabelIds(lbls);
-            // const tvs = await tv(todoTask.url);
-            // tvs.unshift(...lbls);
-            // await api.updateTask(todoTask.id, {labelIds: ids, description: tvs.join("; \n")});
-            await api.updateTask(todoTask.id, {labelIds: ids, description: ''});
-            if (lbls.length) {
-                log.push([todoTask.id, todoTask.url, lbls.join('; ')]);
-            }
-        } catch (e) {
-            errors.push(`${e}`);
-        } finally {
-            bar.increment();
-        }
-    }
+
+    await parallel(3, todoTasks, async (todoTask) => {
+        const [e] = await processTask(todoTask, labels, log);
+        if (e) errors.push([todoTask.id, `${e}`]);
+        bar.increment();
+    });
     bar.stop();
 
     console.table(log.sort(({1: urlA}, {1: urlB}) => urlA.localeCompare(urlB)));
