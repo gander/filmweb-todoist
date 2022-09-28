@@ -69,7 +69,7 @@ interface Task {
 }
 
 type Logs = Array<[number, string, string]>;
-type Errors = Array<[number, string]>;
+type Errors = Array<[number, string, string]>;
 
 const urls = new Set();
 const promises: Promise<boolean>[] = [];
@@ -133,7 +133,7 @@ async function main() {
 
     await parallel(3, todoTasks, async (todoTask) => {
         const [e] = await processTask(todoTask, labels, log);
-        if (e) errors.push([todoTask.id, `${e}`]);
+        if (e) errors.push([todoTask.id, todoTask.url, `${e}`]);
         bar.increment();
     });
     bar.stop();
