@@ -2,7 +2,7 @@ import {TodoistApi} from '@doist/todoist-api-typescript';
 import scrapeIt, {ScrapeResult} from 'scrape-it';
 import cliProgress from 'cli-progress';
 import 'dotenv/config';
-import {parallel, tryit} from 'radash';
+import {parallel, retry} from 'radash';
 
 const api = new TodoistApi(process.env.TODOIST_TOKEN as string);
 const regex = new RegExp(`\\((?<url>https://www.filmweb.pl/[^)]+)\\)$`, 'm');
@@ -108,14 +108,20 @@ const getEntryLabels = async (url: string): Promise<string[]> => {
         .map(value => `VOD.${value}`);
 };
 
-const processTask = tryit(async function (todoTask: Task, labels: LabelsService, log: Logs) {
-    const entryLabels = await getEntryLabels(todoTask.url);
-    const labelIds = await labels.getLabelIds(entryLabels);
-    await api.updateTask(todoTask.id, {labelIds, description: ''});
-    if (entryLabels.length) {
-        log.push([todoTask.id, todoTask.url, entryLabels.join('; ')]);
-    }
-});
+const processTask = (todoTask: Task, labels: LabelsService, log: Logs, errors: Errors) =>
+    retry({times: 3, delay: 1000}, async () => {
+        try {
+            const entryLabels = await getEntryLabels(todoTask.url);
+            const labelIds = await labels.getLabelIds(entryLabels);
+            await api.updateTask(todoTask.id, {labelIds, description: ''});
+            if (entryLabels.length) {
+                log.push([todoTask.id, todoTask.url, entryLabels.join('; ')]);
+            }
+        } catch (e) {
+            errors.push([todoTask.id, todoTask.url, `${e}`]);
+            throw e;
+        }
+    });
 
 
 async function main() {
@@ -132,8 +138,7 @@ async function main() {
     bar.start(todoTasks.length, 0);
 
     await parallel(3, todoTasks, async (todoTask) => {
-        const [e] = await processTask(todoTask, labels, log);
-        if (e) errors.push([todoTask.id, todoTask.url, `${e}`]);
+        await processTask(todoTask, labels, log, errors);
         bar.increment();
     });
     bar.stop();
