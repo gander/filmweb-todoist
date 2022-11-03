@@ -76,8 +76,9 @@ const promises: Promise<boolean>[] = [];
 
 const bar = new cliProgress.SingleBar({}, cliProgress.Presets.rect);
 
-const getTasks = async (): Promise<Task[]> =>
+const getTasks = async (dt: string): Promise<Task[]> =>
     (await api.getTasks({projectId}))
+        .filter(({description}) => description.trim() !== dt)
         .map(task => ({
             id: task.id,
             labels: task.labelIds,
@@ -108,15 +109,13 @@ const getEntryLabels = async (url: string): Promise<string[]> => {
         .map(value => `VOD.${value}`);
 };
 
-const processTask = (todoTask: Task, labels: LabelsService, log: Logs, errors: Errors) =>
+const processTask = (todoTask: Task, labels: LabelsService, log: Logs, errors: Errors, dt: string) =>
     retry({times: 3, delay: 1000}, async () => {
         try {
             const entryLabels = await getEntryLabels(todoTask.url);
             const labelIds = await labels.getLabelIds(entryLabels);
-            await api.updateTask(todoTask.id, {labelIds, description: ''});
-            if (entryLabels.length) {
-                log.push([todoTask.id, todoTask.url, entryLabels.join('; ')]);
-            }
+            await api.updateTask(todoTask.id, {labelIds, description: dt});
+            log.push([todoTask.id, todoTask.url, entryLabels.join('; ')]);
         } catch (e) {
             errors.push([todoTask.id, todoTask.url, `${e}`]);
             throw e;
@@ -125,26 +124,44 @@ const processTask = (todoTask: Task, labels: LabelsService, log: Logs, errors: E
 
 
 async function main() {
+    const dt = new Date().toLocaleDateString();
+
     const labels = new LabelsService(api);
     await labels.load();
-
-    const todoTasks = await getTasks();
-
-    console.log('Removed duplicates:', (await Promise.all(promises)).length);
 
     const log: Logs = [];
     const errors: Errors = [];
 
+    const todoTasks = await getTasks(dt);
+
+    if (todoTasks.length === 0) {
+        console.log('No tasks to process');
+        process.exit();
+    }
+
+    console.log('Removed duplicates:', (await Promise.all(promises)).length);
+
     bar.start(todoTasks.length, 0);
 
     await parallel(3, todoTasks, async (todoTask) => {
-        await processTask(todoTask, labels, log, errors);
+        await processTask(todoTask, labels, log, errors, dt);
         bar.increment();
     });
     bar.stop();
 
-    console.table(log.sort(({1: urlA}, {1: urlB}) => urlA.localeCompare(urlB)));
-    console.table(errors);
+    if (log.length) {
+        console.log('Processed:');
+        console.table(log.sort(({1: urlA}, {1: urlB}) => urlA.localeCompare(urlB)));
+    } else {
+        console.log('Nothing processed');
+    }
+
+    if (errors.length) {
+        console.log('Errors:');
+        console.table(errors);
+    } else {
+        console.log('No errors');
+    }
 }
 
 main().catch(e => console.error(e.message));
